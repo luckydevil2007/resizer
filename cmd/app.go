@@ -2,22 +2,18 @@ package cmd
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
- _  "github.com/lib/pq"
+
 	"github.com/go-chi/chi/v5"
+	_ "github.com/lib/pq"
+	"github.com/luckydevil2007/go-lessons/controllers"
+	"github.com/luckydevil2007/go-lessons/repositories"
+	"github.com/luckydevil2007/go-lessons/usecases"
 	"github.com/pressly/goose"
 	"gopkg.in/yaml.v3"
 )
-
-type TransformStruct struct {
-	Name   string `json:"name"`
-	Rotate int    `json:"rotate"`
-	Resize int    `json:"resize"`
-}
 
 type DbConfig struct {
 	Host     string `yaml:"host"`
@@ -32,7 +28,7 @@ type Config struct {
 }
 
 func formatDSN(dbCponfig DbConfig) string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s",
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		dbCponfig.Host, dbCponfig.Port, dbCponfig.User, dbCponfig.Password, dbCponfig.DBName)
 }
 
@@ -53,102 +49,70 @@ func LoadConfig(Path string) (Config, error) {
 	return config, nil
 }
 
-func openBD(dsn string) {
+func Hash(str, key string) string {
+
+	return str
+}
+
+//controllers
+//----http
+//----другой способ дергания юзкейсов
+
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	})
+}
+
+// move to another package
+// по сути это драйвер БД
+func openBD(dsn string) *sql.DB {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		fmt.Println("Failed to open database:", err)
+		return nil
 	}
-	defer db.Close()
 
 	if err := goose.Up(db, "migrations"); err != nil {
 		fmt.Println("Couldn't apply a migration: ", err)
+		return nil
 	}
-
 	fmt.Println("Migrations applied successfully!")
+
+	return db
 }
 
 func Run() {
 	var config, _ = LoadConfig("db.yaml")
 	dsn := formatDSN(config.DbConfig)
-	openBD(dsn)
+	fmt.Println(dsn)
+	db := openBD(dsn)
 
 	r := chi.NewRouter()
+	repo := repositories.NewUserRepository(db)
+	imageRepo := repositories.NewRepository(db)
+	fileStorage := repositories.NewFileStorage(db, "storage")
+	authUsecase := usecases.NewAuthUseCase(repo)
+	algo := usecases.NewTransformAlgorithm()
+	imageUsecase := usecases.NewImageUseCase(imageRepo, fileStorage, algo)
+
+	c := controllers.NewImageController(authUsecase, imageUsecase, imageRepo)
 
 	//TODO middleware for autorization
+	r.Use(c.AuthMiddleware)
 	r.Get("/", mainHandler)
-	r.Get("/download/{image}", downloadHandler)
+	//	r.Get("/download/{image}", c.downloadHandler)
 
-	r.Put("/update/json", resizeHandler)
-	r.Post("/upload", uploadHandler)
-	r.Delete("/delete/{image}", deleteHandler)
+	r.Put("/update/json", c.TransformHandler)
+	r.Post("/upload", c.UploadHandler)
+	r.Delete("/delete/{image}", c.DeleteHandler)
 
 	fmt.Println("Starting server on :8080...")
 	if err := http.ListenAndServe(":8080", r); err != nil {
-		fmt.Println("Coulan't establish connection on :8080...")
+		fmt.Println("Couldn't establish connection on :8080...")
 	}
 }
 
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hello")
-}
-
-func uploadHandler(w http.ResponseWriter, r *http.Request) {
-
-	file, header, err := r.FormFile("image")
-	if err != nil {
-		http.Error(w, "Cannot upload image", http.StatusExpectationFailed)
-		return
-	}
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
-
-	if os.WriteFile(header.Filename, data, 0644) != nil {
-		http.Error(w, "Unable to save file", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Fprintf(w, "File uploaded successfully")
-}
-
-func resizeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Resize")
-	var transform TransformStruct
-	err := json.NewDecoder(r.Body).Decode(&transform)
-	if err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-		return
-	}
-	fmt.Fprintf(w, "%s", "Image "+transform.Name+" formatted")
-	w.WriteHeader(http.StatusOK)
-
-}
-
-func deleteHandler(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "image")
-	_, err := os.Stat(name)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusBadRequest)
-		return
-	}
-
-	if os.Remove(name) != nil {
-		http.Error(w, "File not found", http.StatusInternalServerError)
-		return
-	}
-	fmt.Fprintf(w, "Image successfully deleted")
-}
-
-func downloadHandler(w http.ResponseWriter, r *http.Request) {
-	filename := chi.URLParam(r, "image")
-	_, err := os.Stat(filename)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	//
-	http.ServeFile(w, r, filename)
 }

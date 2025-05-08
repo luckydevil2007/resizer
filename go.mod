@@ -10,8 +10,14 @@ require (
 )
 
 require (
+	github.com/anthonynsimon/bild v0.14.0 // indirect
+	github.com/disintegration/imaging v1.6.2 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pressly/goose v2.7.0+incompatible // indirect
+	github.com/spf13/cobra v0.0.5 // indirect
+	github.com/spf13/pflag v1.0.3 // indirect
+	golang.org/x/image v0.25.0 // indirect
 )
 
 require (

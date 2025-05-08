@@ -1,0 +1,1 @@
+INSERT INTO images (image_title, owner_id, image_path) VALUES ('kitty.jpeg', 1, 'storage/kitty.jpeg');
