@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/luckydevil2007/go-lessons/entities"
+	"github.com/luckydevil2007/audionotes/entities"
 )
 
 type userRepository struct {

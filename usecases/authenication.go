@@ -4,23 +4,23 @@ import (
 	"context"
 	"errors"
 
-	"github.com/luckydevil2007/go-lessons/entities"
+	"github.com/luckydevil2007/audionotes/entities"
 )
 
-type UserStorage interface {
+type UserRepository interface {
 	GetByLogin(ctx context.Context, login string) (*entities.User, error)
 }
 
 type AuthUseCase struct {
-	userStorage UserStorage
+	userRepo UserRepository
 }
 
-func NewAuthUseCase(userStorage UserStorage) *AuthUseCase {
-	return &AuthUseCase{userStorage: userStorage}
+func NewAuthUseCase(userRepo UserRepository) *AuthUseCase {
+	return &AuthUseCase{userRepo: userRepo}
 }
 
-func (uc *AuthUseCase) Authenticate(ctx context.Context, username, password string) (int, error) {
-	user, _ := uc.userStorage.GetByLogin(ctx, username)
+func (uc *AuthUseCase) Authenticate(ctx context.Context, username string) (int, error) {
+	user, _ := uc.userRepo.GetByLogin(ctx, username)
 	if user == nil {
 		return -1, errors.New("unauthorized")
 	}

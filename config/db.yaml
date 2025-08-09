@@ -1,0 +1,12 @@
+postgres:
+  host: localhost
+  port: 6432
+  user: user
+  password: user
+  dbname: notes
+clickhouse:
+  host: localhost
+  port: 9000
+  user: user
+  password: user
+  dbname: notes

@@ -1,16 +1,20 @@
 package entities
 
-type Image struct {
+type Note struct {
 	ID    int
 	Title string
 	Path  string
 	Owner int
 	Data  []byte
+	Lat   float64
+	Lon   float64
+	Next  *Note
+	Prev  *Note
 }
 
-type ImageTransform struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Rotate int    `json:"rotate"`
-	Resize int    `json:"resize"`
+type Path struct {
+	ID    int
+	Title string
+	Owner int
+	Head  *Note
 }

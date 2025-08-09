@@ -1,4 +1,5 @@
 -- +goose Up
+
 CREATE TABLE
 users(
     id SERIAL PRIMARY KEY,
@@ -6,13 +7,16 @@ users(
     password_hash text
 );
 
-CREATE SEQUENCE images_id_seq;
-CREATE TABLE images (
-    id INT NOT NULL DEFAULT nextval('images_id_seq') PRIMARY KEY,
-    image_title TEXT,
+
+CREATE TABLE notes (
+    id SERIAL NOT NULL PRIMARY KEY,
+    note_title TEXT,
     owner_id INT,
-    image_path TEXT
+    note_path TEXT,
+    lat FLOAT, 
+    lon FLOAT
 );
+
 
 INSERT INTO users (user_name, password_hash) VALUES ('user','123');
 
