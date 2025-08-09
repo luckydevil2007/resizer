@@ -2,45 +2,60 @@ package controllers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
-	"github.com/luckydevil2007/go-lessons/entities"
-	"github.com/luckydevil2007/go-lessons/repositories"
-	"github.com/luckydevil2007/go-lessons/usecases"
+	"github.com/luckydevil2007/resizer/adapters/repositories"
+	"github.com/luckydevil2007/resizer/entities"
+	"github.com/luckydevil2007/resizer/producers"
+	"github.com/luckydevil2007/resizer/usecases"
 )
 
 type ImageController struct {
 	checkAuth *usecases.AuthUseCase
 	image     *usecases.ImageUseCase
 	repo      *repositories.Repository
+	producer  *producers.EventProducer
 }
 
 type HttpController struct { //->responsible only for REST
-	db        *sql.DB
-	checkAuth *usecases.AuthUseCase
-	//db *sql.DB //хранить не ДБ а интерфейс юзкейса
+	repo *repositories.Repository
 }
 
-func NewHttpController(db *sql.DB) HttpController {
-	return HttpController{db: db}
+func NewHttpController(repo *repositories.Repository) HttpController {
+	return HttpController{repo: repo}
 }
 
 func NewImageController(authUC *usecases.AuthUseCase,
 	imageUC *usecases.ImageUseCase,
 	repo *repositories.Repository) *ImageController {
+	brokers := []string{"localhost:9092"}
+	producer, err := producers.NewEventProducer(brokers)
+	if err != nil {
+		return nil
+	}
 	return &ImageController{
 		checkAuth: authUC,
 		image:     imageUC,
 		repo:      repo,
+		producer:  producer,
 	}
 }
 
-func (c *ImageController) AuthMiddleware(next http.Handler) http.Handler {
+type AuthController struct {
+	checkAuth *usecases.AuthUseCase
+}
+
+func NewAuthController(authUC *usecases.AuthUseCase) *AuthController {
+	return &AuthController{
+		checkAuth: authUC,
+	}
+}
+
+func (c *AuthController) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if !ok {
@@ -57,6 +72,28 @@ func (c *ImageController) AuthMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), "id", userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (c *ImageController) MainHandler(w http.ResponseWriter, r *http.Request) {
+	var user entities.User
+	user.ID = r.Context().Value("id").(int)
+
+	//images, err := c.repo.SelectUserImages(r.Context(), &user)
+
+	images, err := c.image.List(r.Context(), user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonData, err := json.Marshal(images)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
 }
 
 func (c *ImageController) UploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +132,7 @@ func (c *ImageController) TransformHandler(w http.ResponseWriter, r *http.Reques
 	img.ID = transform.ID
 	c.image.Transform(r.Context(), &img, transform)
 	fmt.Fprintf(w, "%s", "Image "+transform.Name+" formatted")
-
-	//w.WriteHeader(http.StatusOK)
-	//json.NewEncoder(w).Encode(map[string]string{"status": "transformed"})
+	c.producer.SendTransformEvent(transform)
 }
 
 func (c *ImageController) DeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +147,19 @@ func (c *ImageController) DeleteHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusInternalServerError)
 }
 
+func (c *ImageController) DownloadHandler(w http.ResponseWriter, r *http.Request) {
+	var image entities.Image
+	image.ID, _ = strconv.Atoi(r.FormValue("id"))
+	if c.repo.OpenImage(r.Context(), &image) == nil {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	w.Header().Set("Content-Disposition", "attachment; filename="+image.Path)
+	w.Header().Set("Content-Type", "application/octet-stream")
+
+	http.ServeFile(w, r, image.Path)
+}
+
 /*
 func (c *ImageController) resizeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Resize")
@@ -121,7 +169,6 @@ func (c *ImageController) resizeHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-
 	sqlStatement := `SELECT image_path from images WHERE (id) ($1)`
 
 	var path string
@@ -131,19 +178,5 @@ func (c *ImageController) resizeHandler(w http.ResponseWriter, r *http.Request) 
 	fmt.Fprintf(w, "%s", "Image "+transform.Name+" formatted")
 	w.WriteHeader(http.StatusOK)
 
-}
-
-func (c Controller) downloadHandler(w http.ResponseWriter, r *http.Request) {
-	filename := chi.URLParam(r, "image")
-	_, err := os.Stat(filename)
-	if err != nil {
-		http.Error(w, "File not found", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	//
-	http.ServeFile(w, r, filename)
 }
 */

@@ -4,22 +4,33 @@ import (
 	"context"
 	"errors"
 
-	"github.com/luckydevil2007/go-lessons/entities"
-	"github.com/luckydevil2007/go-lessons/repositories"
+	"github.com/luckydevil2007/resizer/adapters/repositories"
+	"github.com/luckydevil2007/resizer/entities"
 )
 
 type TransformService interface {
 	Transform(transform entities.ImageTransform, data []byte) ([]byte, error)
 }
 
+type IStorage interface {
+	Save(ctx context.Context, image *entities.Image) error
+	Delete(ctx context.Context, image *entities.Image) error
+	Open(ctx context.Context, path string) ([]byte, error)
+}
+
+type ICacheRepository interface {
+	SelectUserImages(ctx context.Context, user *entities.User) ([]entities.Image, error)
+}
+
 type ImageUseCase struct {
-	imageRepo        *repositories.Repository
-	fileStorage      *repositories.FileStorage
+	imageRepo        *repositories.Repository // вынести в интерфейс репозиторий
+	cacheImageRepo   ICacheRepository
+	fileStorage      IStorage
 	transformService TransformService
 }
 
 func NewImageUseCase(imageRepo *repositories.Repository,
-	fileStorage *repositories.FileStorage,
+	fileStorage IStorage,
 	transformService TransformService) *ImageUseCase {
 	return &ImageUseCase{
 		imageRepo:        imageRepo,
@@ -40,6 +51,30 @@ func (uc *ImageUseCase) Upload(ctx context.Context, name string, data []byte, ow
 	}
 
 	return uc.imageRepo.SaveImage(ctx, image)
+}
+
+func (uc *ImageUseCase) List(ctx context.Context, user entities.User) (images []entities.Image, err error) {
+
+	images, err = uc.cacheImageRepo.SelectUserImages(ctx, &user) //cacheImagerRepo
+	if err != nil {
+		return nil, err
+	}
+
+	return images, nil
+
+	/*	rdb := redis.NewClient(&redis.Options{
+			Addr: ":6379",
+		  })
+
+		  val, err := rdb.Get(ctx, "key").Result()
+		  if err != nil {
+			log.Fatalf("Error getting key: %v", err)
+		  }
+
+		  fmt.Println("Got key", val)
+		  //ttl - время жизни ключа
+	*/
+
 }
 
 func (uc *ImageUseCase) Delete(ctx context.Context, image *entities.Image) error {

@@ -6,7 +6,7 @@ import (
 	"image"
 
 	"github.com/disintegration/imaging"
-	"github.com/luckydevil2007/go-lessons/entities"
+	"github.com/luckydevil2007/resizer/entities"
 )
 
 type TransformAlgorithm struct {

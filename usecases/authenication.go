@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/luckydevil2007/go-lessons/entities"
+	"github.com/luckydevil2007/resizer/entities"
 )
 
 type UserStorage interface {
